@@ -62,10 +62,16 @@ Port‑forward the payment service:
 kubectl -n lab port-forward svc/payment 8080:8080
 ```
 
-Set a static JWT (HS256, secret `lab-secret`):
+Generate a JWT and store the signing secret in Kubernetes:
 
 ```bash
-export AUTH_TOKEN="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c3ItMTIzIiwicm9sZXMiOlsicGF5bWVudHMiXSwidGVuYW50IjoiYWNtZSIsIm1lcmNoYW50X3RpZXIiOiJzaWx2ZXIiLCJtZmEiOnRydWUsImlhdCI6MTc3MDE0NTAzMCwiZXhwIjoxODkzNDU2MDAwfQ.uYlTX9o9v0sy1Bk2vxQIE6k6XYTeSqWYeXuf3rbU4Rs"
+./scripts/gen-jwt.sh
+```
+
+Then export the JWT printed by the script:
+
+```bash
+export AUTH_TOKEN="..."
 ```
 
 Allowed request (silver tier, amount <= 1000):
@@ -174,6 +180,8 @@ If your trust domain is different, update the SPIFFE IDs in:
 - OPA uses Envoy egress on `127.0.0.1:15002` to call the entitlements service over mTLS.
 - OPA policies inspect headers and JSON request bodies to enforce business rules and entitlements.
 - Rego policies live in `policies/payment.rego` and `policies/fraud.rego` and are loaded into ConfigMaps by `scripts/deploy-apps.sh`.
+- For stronger integrity, entitlements could return a signed JWT or a signature over the response body so OPA can verify it and mitigate MITM or DNS spoofing risks.
+- JWT verification secrets are stored in the `jwt-secret` Kubernetes secret and injected into OPA and entitlements via env vars.
 
 ## Troubleshooting
 

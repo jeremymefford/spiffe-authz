@@ -29,6 +29,11 @@ spec:
         env:
         - name: PORT
           value: "8083"
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: jwt-secret
+              key: secret
         ports:
         - containerPort: 8083
       - name: envoy

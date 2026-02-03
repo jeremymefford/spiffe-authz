@@ -33,6 +33,7 @@ type Claims struct {
 
 func main() {
 	port := envOr("PORT", "8083")
+	jwtSecret := mustEnv("JWT_SECRET")
 
 	spiffeEntitlements := map[string][]string{
 		// Service-level entitlements (who can call what).
@@ -63,15 +64,19 @@ func main() {
 		}
 
 		requestID := r.Header.Get("x-request-id")
-		if req.Token == "" {
+		token := req.Token
+		if token == "" {
+			token = bearerToken(r.Header.Get("authorization"))
+		}
+		if token == "" {
 			log.Printf("entitlements denied request_id=%s spiffe_id=%s error=missing_token", requestID, req.SpiffeID)
 			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "missing token"})
 			return
 		}
 
-		claims, err := verifyJWT(req.Token, []byte("lab-secret"))
+		claims, err := verifyJWT(token, []byte(jwtSecret))
 		if err != nil {
-			log.Printf("entitlements denied request_id=%s spiffe_id=%s error=%s token_len=%d", requestID, req.SpiffeID, err.Error(), len(req.Token))
+			log.Printf("entitlements denied request_id=%s spiffe_id=%s error=%s token_len=%d", requestID, req.SpiffeID, err.Error(), len(token))
 			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid token"})
 			return
 		}
@@ -98,8 +103,7 @@ func main() {
 func roleEntitlementsFor(roles []string) []string {
 	entitlements := make([]string, 0)
 	roleEntitlements := map[string][]string{
-		"payments": {"user.charge.basic", "user.fraud.score.basic"},
-		"payments_admin": {"user.charge.high", "user.fraud.score.high", "user.refunds"},
+		"finance-admin": {"user.charge.basic", "user.charge.high", "user.fraud.score.basic", "user.fraud.score.high", "user.refunds"},
 		"risk": {"user.fraud.score.high"},
 	}
 	for _, role := range roles {
@@ -189,6 +193,20 @@ func decodeSegment(seg string) ([]byte, error) {
 	return base64.URLEncoding.DecodeString(seg)
 }
 
+func bearerToken(header string) string {
+	if header == "" {
+		return ""
+	}
+	parts := strings.SplitN(header, " ", 2)
+	if len(parts) != 2 {
+		return ""
+	}
+	if strings.ToLower(parts[0]) != "bearer" {
+		return ""
+	}
+	return parts[1]
+}
+
 var errInvalidToken = errors.New("invalid token")
 var errExpiredToken = errors.New("expired token")
 
@@ -203,6 +221,14 @@ func envOr(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+func mustEnv(key string) string {
+	v := os.Getenv(key)
+	if v == "" {
+		log.Fatalf("missing required env var: %s", key)
+	}
+	return v
 }
 
 func logRequests(next http.Handler) http.Handler {

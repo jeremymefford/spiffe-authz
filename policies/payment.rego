@@ -2,6 +2,26 @@ package envoy.authz
 
 default allow = false
 
+response := {
+  "allowed": allow,
+  "http_status": status,
+  "body": body,
+}
+
+status := 200 {
+  allow
+}
+status := 401 {
+  not allow
+}
+
+body := "" {
+  allow
+}
+body := "unauthorized" {
+  not allow
+}
+
 allow {
   input.attributes.request.http.method == "GET"
   input.attributes.request.http.path == "/v1/health"
@@ -53,7 +73,7 @@ allow {
 
 service_spiffe_id := "spiffe://example.org/ns/lab/sa/payment"
 
-jwt_secret := "lab-secret"
+jwt_secret := opa.runtime().env.JWT_SECRET
 
 token := t {
   auth := input.attributes.request.http.headers["authorization"]
@@ -66,6 +86,7 @@ token := t {
 jwt := io.jwt.decode_verify(token, {"secret": jwt_secret, "alg": "HS256"})
 
 jwt_valid {
+  jwt_secret != ""
   jwt[0]
 }
 
@@ -75,7 +96,10 @@ entitlement_allowed(spiffe_id, claims, entitlement) {
   resp := http.send({
     "method": "POST",
     "url": "http://127.0.0.1:15002/v1/check",
-    "headers": {"content-type": "application/json"},
+    "headers": {
+      "content-type": "application/json",
+      "authorization": sprintf("Bearer %s", [token]),
+    },
     "body": {"spiffe_id": spiffe_id, "token": token},
     "timeout": "1s",
   })

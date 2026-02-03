@@ -42,6 +42,10 @@ data:
                   allowed_headers:
                     patterns:
                     - exact: authorization
+                    - exact: x-user-role
+                    - exact: x-merchant-tier
+                    - exact: x-approver-role
+                    - exact: content-type
                   with_request_body:
                     max_request_bytes: 8192
                     allow_partial_message: true

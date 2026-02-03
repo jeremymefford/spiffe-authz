@@ -27,6 +27,8 @@ kubectl apply -f k8s/opa/opa-payment-svc.yaml
 kubectl apply -f k8s/opa/opa-fraud-svc.yaml
 kubectl apply -f k8s/entitlements/entitlements-svc.yaml
 
+kubectl -n lab rollout restart deploy/payment deploy/fraud deploy/opa-payment deploy/opa-fraud deploy/entitlements
+
 kubectl rollout status -n lab deploy/payment
 kubectl rollout status -n lab deploy/fraud
 kubectl rollout status -n lab deploy/opa-payment

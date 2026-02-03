@@ -4,6 +4,15 @@ metadata:
   name: opa-fraud-config
   namespace: lab
 data:
+  opa-config.yaml: |
+    plugins:
+      envoy_ext_authz_grpc:
+        addr: :9191
+        path: envoy/authz/response
+    decision_logs:
+      console: true
+      mask:
+      - /input/attributes/request/http/headers/authorization
   envoy.yaml: |
     node:
       id: opa-fraud

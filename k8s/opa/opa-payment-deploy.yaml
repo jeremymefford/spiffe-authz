@@ -29,13 +29,21 @@ spec:
       - name: opa
         image: openpolicyagent/opa:0.63.0-envoy
         imagePullPolicy: IfNotPresent
+        env:
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: jwt-secret
+              key: secret
         args:
         - run
         - --server
-        - --set=plugins.envoy_ext_authz_grpc.addr=:9191
-        - --set=decision_logs.console=true
+        - --config-file=/config/opa-config.yaml
         - /policies
         volumeMounts:
+        - name: config
+          mountPath: /config/opa-config.yaml
+          subPath: opa-config.yaml
         - name: policy
           mountPath: /policies/policy.rego
           subPath: policy.rego
