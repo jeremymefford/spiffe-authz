@@ -70,8 +70,6 @@ data:
                   allowed_headers:
                     patterns:
                     - exact: authorization
-                    - exact: x-user-role
-                    - exact: x-merchant-tier
                     - exact: content-type
                   with_request_body:
                     max_request_bytes: 8192

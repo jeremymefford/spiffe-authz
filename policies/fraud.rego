@@ -113,7 +113,6 @@ entitlement_allowed(spiffe_id, claims, entitlement) {
     "url": "http://127.0.0.1:15002/v1/check",
     "headers": {
       "content-type": "application/json",
-      "authorization": sprintf("Bearer %s", [token]),
     },
     "body": {"spiffe_id": spiffe_id, "token": token},
     "timeout": "1s",

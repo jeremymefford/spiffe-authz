@@ -126,8 +126,8 @@ curl -i -X POST http://localhost:8080/v1/charge \
 Check OPA decision logs:
 
 ```bash
-kubectl -n lab logs deploy/opa-payment -c opa --tail=50
-kubectl -n lab logs deploy/opa-fraud -c opa --tail=50
+kubectl -n lab logs deploy/opa-payment -c opa --tail=5
+kubectl -n lab logs deploy/opa-fraud -c opa --tail=5
 ```
 
 ## Architecture
@@ -181,7 +181,6 @@ The lab assumes the SPIRE trust domain is `example.org` and registers:
 
 - `spiffe://example.org/ns/lab/sa/payment`
 - `spiffe://example.org/ns/lab/sa/fraud`
-- `spiffe://example.org/ns/lab/sa/client`
 - `spiffe://example.org/ns/lab/sa/opa-payment`
 - `spiffe://example.org/ns/lab/sa/opa-fraud`
 - `spiffe://example.org/ns/lab/sa/entitlements`
@@ -192,7 +191,7 @@ The lab assumes the SPIRE trust domain is `example.org` and registers:
 - Envoy pulls SVIDs from the SPIFFE CSI socket at `/spiffe-workload-api/spire-agent.sock`.
 - `payment` and `fraud` Envoy sidecars call OPA over mTLS.
 - OPA uses Envoy egress on `127.0.0.1:15002` to call the entitlements service over mTLS.
-- OPA policies inspect headers and JSON request bodies to enforce business rules and entitlements.
+- OPA policies inspect JWT claims and JSON request bodies to enforce business rules and entitlements.
 - Rego policies live in `policies/payment.rego` and `policies/fraud.rego` and are loaded into ConfigMaps by `scripts/deploy-apps.sh`.
 - For stronger integrity, entitlements could return a signed JWT or a signature over the response body so OPA can verify it and mitigate MITM or DNS spoofing risks.
 - JWT verification secrets are stored in the `jwt-secret` Kubernetes secret and injected into OPA and entitlements via env vars.

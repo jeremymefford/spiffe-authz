@@ -63,6 +63,19 @@ func main() {
 		}
 
 		requestID := r.Header.Get("x-request-id")
+		callerSpiffeID := spiffeIDFromXFCC(r.Header.Get("x-forwarded-client-cert"))
+		if callerSpiffeID == "" {
+			log.Printf("entitlements denied request_id=%s spiffe_id=%s error=missing_spiffe_id",
+				requestID, req.SpiffeID)
+			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "missing spiffe id"})
+			return
+		}
+		if req.SpiffeID != "" && req.SpiffeID != callerSpiffeID {
+			log.Printf("entitlements denied request_id=%s spiffe_id=%s error=spiffe_mismatch caller_spiffe_id=%s",
+				requestID, req.SpiffeID, callerSpiffeID)
+			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "spiffe id mismatch"})
+			return
+		}
 		token := req.Token
 		if token == "" {
 			token = bearerToken(r.Header.Get("authorization"))
@@ -80,11 +93,11 @@ func main() {
 			return
 		}
 
-		entitlements := mergeEntitlements(spiffeEntitlements[req.SpiffeID], roleEntitlementsFor(claims.Roles))
+		entitlements := mergeEntitlements(spiffeEntitlements[callerSpiffeID], roleEntitlementsFor(claims.Roles))
 		entitlements = unique(entitlements)
 
 		log.Printf("entitlements request_id=%s spiffe_id=%s sub=%s tenant=%s roles=%v entitlements=%v",
-			requestID, req.SpiffeID, claims.Sub, claims.Tenant, claims.Roles, entitlements)
+			requestID, callerSpiffeID, claims.Sub, claims.Tenant, claims.Roles, entitlements)
 
 		writeJSON(w, http.StatusOK, CheckResponse{Entitlements: entitlements})
 	})
@@ -163,6 +176,24 @@ func bearerToken(header string) string {
 		return ""
 	}
 	return parts[1]
+}
+
+func spiffeIDFromXFCC(header string) string {
+	if header == "" {
+		return ""
+	}
+	// Look for URI=spiffe://... in the XFCC header.
+	parts := strings.Split(header, ";")
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if strings.HasPrefix(part, "URI=") {
+			uri := strings.TrimPrefix(part, "URI=")
+			if strings.HasPrefix(uri, "spiffe://") {
+				return uri
+			}
+		}
+	}
+	return ""
 }
 
 var errInvalidToken = errors.New("invalid token")
