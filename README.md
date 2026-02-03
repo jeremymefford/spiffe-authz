@@ -1,5 +1,7 @@
 # SPIRE + SPIFFE + Envoy + OPA lab (kind)
 
+_OpenAI's Codex was heavily used in creating this lab_
+
 This lab spins up a local k8s environment that demonstrates:
 
 - SPIRE issuing SPIFFE identities to workloads
@@ -8,7 +10,7 @@ This lab spins up a local k8s environment that demonstrates:
 - Entitlements service as a repository for service entitlements + JWT role entitlements
 - End‑to‑end request evaluation using both SPIFFE identity and JWT claims
 
-Two services are provided:
+Services:
 
 - `payment` (inbound authz + calls fraud)
 - `fraud` (only accepts mTLS from payment)
@@ -62,13 +64,8 @@ Port‑forward the payment service:
 kubectl -n lab port-forward svc/payment 8080:8080
 ```
 
-Generate a JWT and store the signing secret in Kubernetes:
 
-```bash
-./scripts/gen-jwt.sh
-```
-
-Then export the JWTs printed by the script:
+Generate a JWT, store the signing secret in Kubernetes, and export the JWTs printed by the script:
 
 ```bash
 eval "$(./scripts/gen-jwt.sh)"
@@ -80,7 +77,7 @@ Allowed request (basic user, amount <= 100):
 curl -s -X POST http://localhost:8080/v1/charge \
   -H 'content-type: application/json' \
   -H "authorization: Bearer ${BASIC_AUTH_TOKEN}" \
-  -d '{"amount":99,"currency":"USD","card_country":"US","merchant_id":"m-123","user_id":"u-456"}'
+  -d '{"amount":99,"currency":"USD","card_country":"US","merchant_id":"m-123"}'
 ```
 
 Denied by payment OPA (basic user over limit):
@@ -89,7 +86,7 @@ Denied by payment OPA (basic user over limit):
 curl -i -X POST http://localhost:8080/v1/charge \
   -H 'content-type: application/json' \
   -H "authorization: Bearer ${BASIC_AUTH_TOKEN}" \
-  -d '{"amount":199,"currency":"USD","card_country":"US","merchant_id":"m-123","user_id":"u-456"}'
+  -d '{"amount":199,"currency":"USD","card_country":"US","merchant_id":"m-123"}'
 ```
 
 Denied by fraud OPA (riskier merchant, low fraud threshold):
@@ -98,7 +95,7 @@ Denied by fraud OPA (riskier merchant, low fraud threshold):
 curl -i -X POST http://localhost:8080/v1/charge \
   -H 'content-type: application/json' \
   -H "authorization: Bearer ${ADMIN_AUTH_TOKEN}" \
-  -d '{"amount":600,"currency":"USD","card_country":"US","merchant_id":"m-gambling","user_id":"u-456"}'
+  -d '{"amount":600,"currency":"USD","card_country":"US","merchant_id":"m-gambling"}'
 ```
 
 Admin succeeds where basic fails (same request, different token):
@@ -108,13 +105,13 @@ Admin succeeds where basic fails (same request, different token):
 curl -i -X POST http://localhost:8080/v1/charge \
   -H 'content-type: application/json' \
   -H "authorization: Bearer ${BASIC_AUTH_TOKEN}" \
-  -d '{"amount":199,"currency":"USD","card_country":"US","merchant_id":"m-123","user_id":"u-456"}'
+  -d '{"amount":199,"currency":"USD","card_country":"US","merchant_id":"m-123"}'
 
 # ADMIN (succeeds)
 curl -i -X POST http://localhost:8080/v1/charge \
   -H 'content-type: application/json' \
   -H "authorization: Bearer ${ADMIN_AUTH_TOKEN}" \
-  -d '{"amount":199,"currency":"USD","card_country":"US","merchant_id":"m-123","user_id":"u-456"}'
+  -d '{"amount":199,"currency":"USD","card_country":"US","merchant_id":"m-123"}'
 ```
 
 Admin still fails on m-gambling above $500:
@@ -123,7 +120,7 @@ Admin still fails on m-gambling above $500:
 curl -i -X POST http://localhost:8080/v1/charge \
   -H 'content-type: application/json' \
   -H "authorization: Bearer ${ADMIN_AUTH_TOKEN}" \
-  -d '{"amount":600,"currency":"USD","card_country":"US","merchant_id":"m-gambling","user_id":"u-456"}'
+  -d '{"amount":600,"currency":"USD","card_country":"US","merchant_id":"m-gambling"}'
 ```
 
 Check OPA decision logs:
@@ -189,12 +186,6 @@ The lab assumes the SPIRE trust domain is `example.org` and registers:
 - `spiffe://example.org/ns/lab/sa/opa-fraud`
 - `spiffe://example.org/ns/lab/sa/entitlements`
 
-If your trust domain is different, update the SPIFFE IDs in:
-
-- `k8s/payment-config.yaml`
-- `k8s/fraud-config.yaml`
-- `scripts/register-entries.sh`
-
 ## Notes
 
 - `payment` calls `fraud` through Envoy on `127.0.0.1:15001`, so all traffic uses mTLS.
@@ -205,13 +196,3 @@ If your trust domain is different, update the SPIFFE IDs in:
 - Rego policies live in `policies/payment.rego` and `policies/fraud.rego` and are loaded into ConfigMaps by `scripts/deploy-apps.sh`.
 - For stronger integrity, entitlements could return a signed JWT or a signature over the response body so OPA can verify it and mitigate MITM or DNS spoofing risks.
 - JWT verification secrets are stored in the `jwt-secret` Kubernetes secret and injected into OPA and entitlements via env vars.
-- Fraud calls are required in this lab; `payment` always calls `fraud` for a score.
-
-## Troubleshooting
-
-- If requests are denied, check OPA decision logs:
-  - `kubectl -n lab logs deploy/opa-payment -c opa --tail=50`
-  - `kubectl -n lab logs deploy/opa-fraud -c opa --tail=50`
-- If entitlements aren’t being hit, check:
-  - `kubectl -n lab logs deploy/entitlements -c entitlements --tail=50`
-  - `kubectl -n lab logs deploy/entitlements -c envoy --tail=50`

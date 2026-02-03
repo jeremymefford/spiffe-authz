@@ -14,7 +14,6 @@ type ChargeRequest struct {
 	Currency    string `json:"currency"`
 	CardCountry string `json:"card_country"`
 	MerchantID  string `json:"merchant_id"`
-	UserID      string `json:"user_id"`
 }
 
 type FraudScoreRequest struct {
@@ -22,7 +21,6 @@ type FraudScoreRequest struct {
 	Currency    string `json:"currency"`
 	CardCountry string `json:"card_country"`
 	MerchantID  string `json:"merchant_id"`
-	UserID      string `json:"user_id"`
 }
 
 type FraudScoreResponse struct {
