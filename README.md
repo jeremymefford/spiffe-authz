@@ -4,12 +4,16 @@ This lab spins up a local k8s environment that demonstrates:
 
 - SPIRE issuing SPIFFE identities to workloads
 - Envoy sidecars enforcing mTLS between services
-- OPA sidecars enforcing fine‑grained AuthZ
+- Dedicated OPA services enforcing fine‑grained AuthZ
+- Entitlements service as a repository for service entitlements + JWT role entitlements
+- End‑to‑end request evaluation using both SPIFFE identity and JWT claims
 
 Two services are provided:
 
 - `payment` (inbound authz + calls fraud)
 - `fraud` (only accepts mTLS from payment)
+- `entitlements` (repository for SPIFFE + role entitlements)
+- `opa-payment` / `opa-fraud` (dedicated policy engines)
 
 ## Prereqs
 
@@ -58,11 +62,18 @@ Port‑forward the payment service:
 kubectl -n lab port-forward svc/payment 8080:8080
 ```
 
+Set a static JWT (HS256, secret `lab-secret`):
+
+```bash
+export AUTH_TOKEN="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c3ItMTIzIiwicm9sZXMiOlsicGF5bWVudHMiXSwidGVuYW50IjoiYWNtZSIsIm1lcmNoYW50X3RpZXIiOiJzaWx2ZXIiLCJtZmEiOnRydWUsImlhdCI6MTc3MDE0NTAzMCwiZXhwIjoxODkzNDU2MDAwfQ.uYlTX9o9v0sy1Bk2vxQIE6k6XYTeSqWYeXuf3rbU4Rs"
+```
+
 Allowed request (silver tier, amount <= 1000):
 
 ```bash
 curl -s -X POST http://localhost:8080/v1/charge \
   -H 'content-type: application/json' \
+  -H "authorization: Bearer ${AUTH_TOKEN}" \
   -H 'x-user-role: payments' \
   -H 'x-merchant-tier: silver' \
   -d '{"amount":900,"currency":"USD","card_country":"US","merchant_id":"m-123","user_id":"u-456"}' | jq
@@ -73,6 +84,7 @@ Denied by payment OPA (amount too high for non‑gold):
 ```bash
 curl -i -X POST http://localhost:8080/v1/charge \
   -H 'content-type: application/json' \
+  -H "authorization: Bearer ${AUTH_TOKEN}" \
   -H 'x-user-role: payments' \
   -H 'x-merchant-tier: silver' \
   -d '{"amount":2500,"currency":"USD","card_country":"US","merchant_id":"m-123","user_id":"u-456"}'
@@ -83,6 +95,7 @@ Denied by fraud OPA (amount too high for fraud policy):
 ```bash
 curl -i -X POST http://localhost:8080/v1/charge \
   -H 'content-type: application/json' \
+  -H "authorization: Bearer ${AUTH_TOKEN}" \
   -H 'x-user-role: payments' \
   -H 'x-merchant-tier: silver' \
   -d '{"amount":1500,"currency":"USD","card_country":"US","merchant_id":"m-123","user_id":"u-456"}'
@@ -91,8 +104,49 @@ curl -i -X POST http://localhost:8080/v1/charge \
 Check OPA decision logs:
 
 ```bash
-kubectl -n lab logs deploy/payment -c opa --tail=50
-kubectl -n lab logs deploy/fraud -c opa --tail=50
+kubectl -n lab logs deploy/opa-payment -c opa --tail=50
+kubectl -n lab logs deploy/opa-fraud -c opa --tail=50
+```
+
+## Architecture
+
+### High-Level Flow
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant PaymentEnvoy
+    participant OPA_Payment
+    participant EntitlementsEnvoy
+    participant Entitlements
+    participant FraudEnvoy
+    participant OPA_Fraud
+    participant Fraud
+
+    Client->>PaymentEnvoy: HTTP /v1/charge + JWT
+    PaymentEnvoy->>OPA_Payment: ext_authz (mTLS)
+    OPA_Payment->>EntitlementsEnvoy: /v1/check (mTLS, JWT)
+    EntitlementsEnvoy->>Entitlements: /v1/check
+    Entitlements-->>OPA_Payment: entitlements list
+    OPA_Payment-->>PaymentEnvoy: allow/deny
+    PaymentEnvoy->>FraudEnvoy: /v1/score (mTLS)
+    FraudEnvoy->>OPA_Fraud: ext_authz (mTLS)
+    OPA_Fraud->>EntitlementsEnvoy: /v1/check (mTLS, JWT)
+    Entitlements-->>OPA_Fraud: entitlements list
+    OPA_Fraud-->>FraudEnvoy: allow/deny
+    FraudEnvoy-->>PaymentEnvoy: fraud score
+    PaymentEnvoy-->>Client: charge response
+```
+
+### Identity & Entitlements
+
+```mermaid
+flowchart LR
+    A[SPIFFE ID<br/>spiffe://example.org/ns/lab/sa/payment] --> B[Service Entitlements<br/>svc.charge, svc.fraud.score]
+    C[JWT Claims<br/>roles: payments, tenant: acme, mfa: true] --> D[Role Entitlements<br/>user.charge.basic, user.fraud.score.basic]
+    B --> E[OPA Policy Decision]
+    D --> E
+    E --> F[ALLOW / DENY]
 ```
 
 ## SPIFFE IDs
@@ -102,6 +156,9 @@ The lab assumes the SPIRE trust domain is `example.org` and registers:
 - `spiffe://example.org/ns/lab/sa/payment`
 - `spiffe://example.org/ns/lab/sa/fraud`
 - `spiffe://example.org/ns/lab/sa/client`
+- `spiffe://example.org/ns/lab/sa/opa-payment`
+- `spiffe://example.org/ns/lab/sa/opa-fraud`
+- `spiffe://example.org/ns/lab/sa/entitlements`
 
 If your trust domain is different, update the SPIFFE IDs in:
 
@@ -112,6 +169,17 @@ If your trust domain is different, update the SPIFFE IDs in:
 ## Notes
 
 - `payment` calls `fraud` through Envoy on `127.0.0.1:15001`, so all traffic uses mTLS.
-- Envoy pulls SVIDs from the SPIFFE CSI socket at `/spiffe-workload-api/agent.sock`.
-- The fraud Envoy listener requires a valid SPIFFE ID for the payment service.
-- OPA policies inspect headers and JSON request bodies to enforce business rules.
+- Envoy pulls SVIDs from the SPIFFE CSI socket at `/spiffe-workload-api/spire-agent.sock`.
+- `payment` and `fraud` Envoy sidecars call OPA over mTLS.
+- OPA uses Envoy egress on `127.0.0.1:15002` to call the entitlements service over mTLS.
+- OPA policies inspect headers and JSON request bodies to enforce business rules and entitlements.
+- Rego policies live in `policies/payment.rego` and `policies/fraud.rego` and are loaded into ConfigMaps by `scripts/deploy-apps.sh`.
+
+## Troubleshooting
+
+- If requests are denied, check OPA decision logs:
+  - `kubectl -n lab logs deploy/opa-payment -c opa --tail=50`
+  - `kubectl -n lab logs deploy/opa-fraud -c opa --tail=50`
+- If entitlements aren’t being hit, check:
+  - `kubectl -n lab logs deploy/entitlements -c entitlements --tail=50`
+  - `kubectl -n lab logs deploy/entitlements -c envoy --tail=50`

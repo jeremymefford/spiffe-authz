@@ -1,36 +1,36 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: fraud
+  name: entitlements
   namespace: lab
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: fraud
+      app: entitlements
   template:
     metadata:
       labels:
-        app: fraud
+        app: entitlements
     spec:
-      serviceAccountName: fraud
+      serviceAccountName: entitlements
       volumes:
       - name: config
         configMap:
-          name: fraud-config
+          name: entitlements-config
       - name: spiffe-workload-api
         csi:
           driver: csi.spiffe.io
           readOnly: true
       containers:
-      - name: fraud
-        image: fraud:local
+      - name: entitlements
+        image: entitlements:local
         imagePullPolicy: IfNotPresent
         env:
         - name: PORT
-          value: "8082"
+          value: "8083"
         ports:
-        - containerPort: 8082
+        - containerPort: 8083
       - name: envoy
         image: envoyproxy/envoy:v1.28.2
         imagePullPolicy: IfNotPresent

@@ -111,6 +111,7 @@ func fetchFraudScore(r *http.Request, url string, payload FraudScoreRequest) (*F
 	copyHeader(r, req, "x-user-role")
 	copyHeader(r, req, "x-merchant-tier")
 	copyHeader(r, req, "x-transaction-id")
+	copyHeader(r, req, "authorization")
 
 	client := &http.Client{Timeout: 3 * time.Second}
 	resp, err := client.Do(req)

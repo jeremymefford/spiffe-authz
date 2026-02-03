@@ -1,13 +1,13 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: fraud-config
+  name: entitlements-config
   namespace: lab
 data:
   envoy.yaml: |
     node:
-      id: fraud
-      cluster: fraud
+      id: entitlements
+      cluster: entitlements
     static_resources:
       listeners:
       - name: inbound
@@ -23,7 +23,7 @@ data:
               require_client_certificate: true
               common_tls_context:
                 tls_certificate_sds_secret_configs:
-                - name: spiffe://example.org/ns/lab/sa/fraud
+                - name: spiffe://example.org/ns/lab/sa/entitlements
                   sds_config:
                     api_config_source:
                       api_type: GRPC
@@ -34,7 +34,8 @@ data:
                 combined_validation_context:
                   default_validation_context:
                     match_subject_alt_names:
-                    - exact: spiffe://example.org/ns/lab/sa/payment
+                    - exact: spiffe://example.org/ns/lab/sa/opa-payment
+                    - exact: spiffe://example.org/ns/lab/sa/opa-fraud
                   validation_context_sds_secret_config:
                     name: spiffe://example.org
                     sds_config:
@@ -52,86 +53,31 @@ data:
               route_config:
                 name: local_route
                 virtual_hosts:
-                - name: fraud
+                - name: entitlements
                   domains: ["*"]
                   routes:
                   - match:
                       prefix: "/"
                     route:
-                      cluster: fraud_app
+                      cluster: entitlements_app
               http_filters:
-              - name: envoy.filters.http.ext_authz
-                typed_config:
-                  "@type": type.googleapis.com/envoy.extensions.filters.http.ext_authz.v3.ExtAuthz
-                  grpc_service:
-                    envoy_grpc:
-                      cluster_name: opa
-                  transport_api_version: V3
-                  allowed_headers:
-                    patterns:
-                    - exact: authorization
-                  with_request_body:
-                    max_request_bytes: 8192
-                    allow_partial_message: true
               - name: envoy.filters.http.router
                 typed_config:
                   "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
       clusters:
-      - name: fraud_app
+      - name: entitlements_app
         connect_timeout: 0.25s
         type: STATIC
         lb_policy: ROUND_ROBIN
         load_assignment:
-          cluster_name: fraud_app
+          cluster_name: entitlements_app
           endpoints:
           - lb_endpoints:
             - endpoint:
                 address:
                   socket_address:
                     address: 127.0.0.1
-                    port_value: 8082
-      - name: opa
-        connect_timeout: 0.5s
-        type: STRICT_DNS
-        lb_policy: ROUND_ROBIN
-        http2_protocol_options: {}
-        load_assignment:
-          cluster_name: opa
-          endpoints:
-          - lb_endpoints:
-            - endpoint:
-                address:
-                  socket_address:
-                    address: opa-fraud.lab.svc.cluster.local
-                    port_value: 8080
-        transport_socket:
-          name: envoy.transport_sockets.tls
-          typed_config:
-            "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext
-            sni: opa-fraud.lab
-            common_tls_context:
-              tls_certificate_sds_secret_configs:
-              - name: spiffe://example.org/ns/lab/sa/fraud
-                sds_config:
-                  api_config_source:
-                    api_type: GRPC
-                    grpc_services:
-                    - envoy_grpc:
-                        cluster_name: spire_agent
-                    transport_api_version: V3
-              combined_validation_context:
-                default_validation_context:
-                  match_subject_alt_names:
-                  - exact: spiffe://example.org/ns/lab/sa/opa-fraud
-                validation_context_sds_secret_config:
-                  name: spiffe://example.org
-                  sds_config:
-                    api_config_source:
-                      api_type: GRPC
-                      grpc_services:
-                      - envoy_grpc:
-                          cluster_name: spire_agent
-                      transport_api_version: V3
+                    port_value: 8083
       - name: spire_agent
         connect_timeout: 0.25s
         http2_protocol_options: {}

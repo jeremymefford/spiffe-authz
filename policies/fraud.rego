@@ -9,35 +9,22 @@ allow {
 
 allow {
   input.attributes.request.http.method == "POST"
-  input.attributes.request.http.path == "/v1/refund"
-  input.attributes.request.http.headers["x-approver-role"] == "refunds"
-  jwt_valid
-  claims := jwt_claims
-  claims.mfa == true
-  claims.tenant == "acme"
-  claims.merchant_tier == input.attributes.request.http.headers["x-merchant-tier"]
-  entitlement_allowed(service_spiffe_id, claims, "svc.charge")
-  entitlement_allowed(service_spiffe_id, claims, "user.refunds")
-}
-
-allow {
-  input.attributes.request.http.method == "POST"
-  input.attributes.request.http.path == "/v1/charge"
+  input.attributes.request.http.path == "/v1/score"
+  input.attributes.source.principal == "spiffe://example.org/ns/lab/sa/payment"
   input.attributes.request.http.headers["x-user-role"] == "payments"
   jwt_valid
   claims := jwt_claims
   claims.tenant == "acme"
-  claims.merchant_tier == input.attributes.request.http.headers["x-merchant-tier"]
   body := json.unmarshal(input.attributes.request.http.body)
-  body.currency == "USD"
-  body.amount <= 1000
-  entitlement_allowed(service_spiffe_id, claims, "svc.charge")
-  entitlement_allowed(service_spiffe_id, claims, "user.charge.basic")
+  body.amount <= 2000
+  entitlement_allowed(payment_spiffe_id, claims, "svc.fraud.score")
+  entitlement_allowed(payment_spiffe_id, claims, "user.fraud.score.basic")
 }
 
 allow {
   input.attributes.request.http.method == "POST"
-  input.attributes.request.http.path == "/v1/charge"
+  input.attributes.request.http.path == "/v1/score"
+  input.attributes.source.principal == "spiffe://example.org/ns/lab/sa/payment"
   input.attributes.request.http.headers["x-user-role"] == "payments"
   input.attributes.request.http.headers["x-merchant-tier"] == "gold"
   jwt_valid
@@ -45,13 +32,12 @@ allow {
   claims.tenant == "acme"
   claims.merchant_tier == "gold"
   body := json.unmarshal(input.attributes.request.http.body)
-  body.currency == "USD"
   body.amount <= 5000
-  entitlement_allowed(service_spiffe_id, claims, "svc.charge")
-  entitlement_allowed(service_spiffe_id, claims, "user.charge.high")
+  entitlement_allowed(payment_spiffe_id, claims, "svc.fraud.score")
+  entitlement_allowed(payment_spiffe_id, claims, "user.fraud.score.high")
 }
 
-service_spiffe_id := "spiffe://example.org/ns/lab/sa/payment"
+payment_spiffe_id := "spiffe://example.org/ns/lab/sa/payment"
 
 jwt_secret := "lab-secret"
 

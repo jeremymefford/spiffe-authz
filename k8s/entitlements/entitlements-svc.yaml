@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: entitlements
+  namespace: lab
+spec:
+  selector:
+    app: entitlements
+  ports:
+  - name: http
+    port: 8080
+    targetPort: 8080

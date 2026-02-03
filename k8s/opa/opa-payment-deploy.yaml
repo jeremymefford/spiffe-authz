@@ -1,36 +1,44 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: fraud
+  name: opa-payment
   namespace: lab
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: fraud
+      app: opa-payment
   template:
     metadata:
       labels:
-        app: fraud
+        app: opa-payment
     spec:
-      serviceAccountName: fraud
+      serviceAccountName: opa-payment
       volumes:
       - name: config
         configMap:
-          name: fraud-config
+          name: opa-payment-config
+      - name: policy
+        configMap:
+          name: opa-payment-policy
       - name: spiffe-workload-api
         csi:
           driver: csi.spiffe.io
           readOnly: true
       containers:
-      - name: fraud
-        image: fraud:local
+      - name: opa
+        image: openpolicyagent/opa:0.63.0-envoy
         imagePullPolicy: IfNotPresent
-        env:
-        - name: PORT
-          value: "8082"
-        ports:
-        - containerPort: 8082
+        args:
+        - run
+        - --server
+        - --set=plugins.envoy_ext_authz_grpc.addr=:9191
+        - --set=decision_logs.console=true
+        - /policies
+        volumeMounts:
+        - name: policy
+          mountPath: /policies/policy.rego
+          subPath: policy.rego
       - name: envoy
         image: envoyproxy/envoy:v1.28.2
         imagePullPolicy: IfNotPresent
@@ -41,6 +49,7 @@ spec:
         - info
         ports:
         - containerPort: 8080
+        - containerPort: 15002
         - containerPort: 9901
         volumeMounts:
         - name: config

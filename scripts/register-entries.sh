@@ -68,5 +68,8 @@ register_entry() {
 register_entry "spiffe://example.org/ns/lab/sa/payment" lab payment
 register_entry "spiffe://example.org/ns/lab/sa/fraud" lab fraud
 register_entry "spiffe://example.org/ns/lab/sa/client" lab client
+register_entry "spiffe://example.org/ns/lab/sa/opa-payment" lab opa-payment
+register_entry "spiffe://example.org/ns/lab/sa/opa-fraud" lab opa-fraud
+register_entry "spiffe://example.org/ns/lab/sa/entitlements" lab entitlements
 
 echo "Entries registered."
