@@ -50,6 +50,9 @@ data:
             typed_config:
               "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
               stat_prefix: inbound_http
+              forward_client_cert_details: APPEND_FORWARD
+              set_current_client_cert_details:
+                uri: true
               route_config:
                 name: local_route
                 virtual_hosts:

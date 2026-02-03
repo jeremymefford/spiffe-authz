@@ -191,6 +191,7 @@ The lab assumes the SPIRE trust domain is `example.org` and registers:
 - Envoy pulls SVIDs from the SPIFFE CSI socket at `/spiffe-workload-api/spire-agent.sock`.
 - `payment` and `fraud` Envoy sidecars call OPA over mTLS.
 - OPA uses Envoy egress on `127.0.0.1:15002` to call the entitlements service over mTLS.
+- Entitlements derives the caller SPIFFE ID from mTLS (`x-forwarded-client-cert`) and rejects mismatches.
 - OPA policies inspect JWT claims and JSON request bodies to enforce business rules and entitlements.
 - Rego policies live in `policies/payment.rego` and `policies/fraud.rego` and are loaded into ConfigMaps by `scripts/deploy-apps.sh`.
 - For stronger integrity, entitlements could return a signed JWT or a signature over the response body so OPA can verify it and mitigate MITM or DNS spoofing risks.

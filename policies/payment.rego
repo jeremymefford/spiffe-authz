@@ -23,34 +23,39 @@ body := "unauthorized" {
 }
 
 allow {
-  input.attributes.request.http.method == "GET"
-  input.attributes.request.http.path == "/v1/health"
+  is_health
 }
 
 allow {
-  input.attributes.request.http.method == "POST"
-  input.attributes.request.http.path == "/v1/refund"
-  jwt_valid
+  is_refund
+  valid_claims
   claims := jwt_claims
   claims.mfa == true
-  claims.tenant == "acme"
-  claims.merchant_tier != ""
-  entitlement_allowed(service_spiffe_id, claims, "svc.charge")
-  entitlement_allowed(service_spiffe_id, claims, "user.refunds")
+  has_entitlement("svc.charge")
+  has_entitlement("user.refunds")
 }
 
 allow {
-  input.attributes.request.http.method == "POST"
-  input.attributes.request.http.path == "/v1/charge"
-  jwt_valid
+  is_charge
+  valid_claims
   claims := jwt_claims
-  claims.tenant == "acme"
-  claims.merchant_tier != ""
-  body := json.unmarshal(input.attributes.request.http.body)
-  body.currency == "USD"
-  body.amount <= basic_limit(claims)
-  entitlement_allowed(service_spiffe_id, claims, "svc.charge")
-  entitlement_allowed(service_spiffe_id, claims, "user.charge.basic")
+  req := req_body
+  req.currency == "USD"
+  req.amount <= basic_limit(claims)
+  has_entitlement("svc.charge")
+  has_entitlement("user.charge.basic")
+}
+
+allow {
+  is_charge
+  valid_claims
+  claims := jwt_claims
+  claims.merchant_tier == "gold"
+  req := req_body
+  req.currency == "USD"
+  req.amount <= 5000
+  has_entitlement("svc.charge")
+  has_entitlement("user.charge.high")
 }
 
 basic_limit(claims) := 100 {
@@ -66,19 +71,29 @@ is_data_entry(claims) {
   roles[_] == "finance-data-entry"
 }
 
-allow {
+is_health {
+  input.attributes.request.http.method == "GET"
+  input.attributes.request.http.path == "/v1/health"
+}
+
+is_refund {
+  input.attributes.request.http.method == "POST"
+  input.attributes.request.http.path == "/v1/refund"
+}
+
+is_charge {
   input.attributes.request.http.method == "POST"
   input.attributes.request.http.path == "/v1/charge"
-  jwt_valid
-  claims := jwt_claims
-  claims.tenant == "acme"
-  claims.merchant_tier == "gold"
-  body := json.unmarshal(input.attributes.request.http.body)
-  body.currency == "USD"
-  body.amount <= 5000
-  entitlement_allowed(service_spiffe_id, claims, "svc.charge")
-  entitlement_allowed(service_spiffe_id, claims, "user.charge.high")
 }
+
+valid_claims {
+  jwt_valid
+  c := jwt_claims
+  c.tenant == "acme"
+  c.merchant_tier != ""
+}
+
+req_body := json.unmarshal(input.attributes.request.http.body)
 
 service_spiffe_id := "spiffe://example.org/ns/lab/sa/payment"
 
@@ -101,7 +116,11 @@ jwt_valid {
 
 jwt_claims := jwt[2]
 
-entitlement_allowed(spiffe_id, claims, entitlement) {
+has_entitlement(entitlement) {
+  entitlement_allowed(service_spiffe_id, entitlement)
+}
+
+entitlement_allowed(spiffe_id, entitlement) {
   resp := http.send({
     "method": "POST",
     "url": "http://127.0.0.1:15002/v1/check",
