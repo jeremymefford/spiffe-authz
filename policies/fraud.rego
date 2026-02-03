@@ -31,11 +31,12 @@ allow {
   input.attributes.request.http.method == "POST"
   input.attributes.request.http.path == "/v1/score"
   input.attributes.source.principal == "spiffe://example.org/ns/lab/sa/payment"
-  input.attributes.request.http.headers["x-user-role"] == "payments"
   jwt_valid
   claims := jwt_claims
   claims.tenant == "acme"
+  claims.merchant_tier != ""
   body := json.unmarshal(input.attributes.request.http.body)
+  body.merchant_id != "m-gambling"
   body.amount <= 2000
   entitlement_allowed(payment_spiffe_id, claims, "svc.fraud.score")
   entitlement_allowed(payment_spiffe_id, claims, "user.fraud.score.basic")
@@ -45,14 +46,42 @@ allow {
   input.attributes.request.http.method == "POST"
   input.attributes.request.http.path == "/v1/score"
   input.attributes.source.principal == "spiffe://example.org/ns/lab/sa/payment"
-  input.attributes.request.http.headers["x-user-role"] == "payments"
-  input.attributes.request.http.headers["x-merchant-tier"] == "gold"
   jwt_valid
   claims := jwt_claims
   claims.tenant == "acme"
   claims.merchant_tier == "gold"
   body := json.unmarshal(input.attributes.request.http.body)
+  body.merchant_id != "m-gambling"
   body.amount <= 5000
+  entitlement_allowed(payment_spiffe_id, claims, "svc.fraud.score")
+  entitlement_allowed(payment_spiffe_id, claims, "user.fraud.score.high")
+}
+
+allow {
+  input.attributes.request.http.method == "POST"
+  input.attributes.request.http.path == "/v1/score"
+  input.attributes.source.principal == "spiffe://example.org/ns/lab/sa/payment"
+  jwt_valid
+  claims := jwt_claims
+  claims.tenant == "acme"
+  body := json.unmarshal(input.attributes.request.http.body)
+  body.merchant_id == "m-gambling"
+  body.amount <= 500
+  entitlement_allowed(payment_spiffe_id, claims, "svc.fraud.score")
+  entitlement_allowed(payment_spiffe_id, claims, "user.fraud.score.basic")
+}
+
+allow {
+  input.attributes.request.http.method == "POST"
+  input.attributes.request.http.path == "/v1/score"
+  input.attributes.source.principal == "spiffe://example.org/ns/lab/sa/payment"
+  jwt_valid
+  claims := jwt_claims
+  claims.tenant == "acme"
+  claims.merchant_tier == "gold"
+  body := json.unmarshal(input.attributes.request.http.body)
+  body.merchant_id == "m-gambling"
+  body.amount <= 500
   entitlement_allowed(payment_spiffe_id, claims, "svc.fraud.score")
   entitlement_allowed(payment_spiffe_id, claims, "user.fraud.score.high")
 }

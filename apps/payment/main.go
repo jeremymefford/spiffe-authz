@@ -60,6 +60,10 @@ func main() {
 
 		score, err := fetchFraudScore(r, fraudURL+"/v1/score", FraudScoreRequest(req))
 		if err != nil {
+			if he, ok := isHTTPError(err); ok && he.code >= 400 && he.code < 500 {
+				writeJSON(w, he.code, map[string]string{"error": err.Error()})
+				return
+			}
 			writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
 			return
 		}
@@ -144,16 +148,24 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	_ = json.NewEncoder(w).Encode(v)
 }
 
-func errStatus(code int) error {
-	return &httpError{code: code}
-}
-
 type httpError struct {
 	code int
 }
 
+func errStatus(code int) *httpError {
+	return &httpError{code: code}
+}
+
 func (e *httpError) Error() string {
 	return "upstream status " + http.StatusText(e.code)
+}
+
+func isHTTPError(err error) (*httpError, bool) {
+	if err == nil {
+		return nil, false
+	}
+	he, ok := err.(*httpError)
+	return he, ok
 }
 
 func envOr(key, fallback string) string {

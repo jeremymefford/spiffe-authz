@@ -30,12 +30,11 @@ allow {
 allow {
   input.attributes.request.http.method == "POST"
   input.attributes.request.http.path == "/v1/refund"
-  input.attributes.request.http.headers["x-approver-role"] == "refunds"
   jwt_valid
   claims := jwt_claims
   claims.mfa == true
   claims.tenant == "acme"
-  claims.merchant_tier == input.attributes.request.http.headers["x-merchant-tier"]
+  claims.merchant_tier != ""
   entitlement_allowed(service_spiffe_id, claims, "svc.charge")
   entitlement_allowed(service_spiffe_id, claims, "user.refunds")
 }
@@ -43,23 +42,33 @@ allow {
 allow {
   input.attributes.request.http.method == "POST"
   input.attributes.request.http.path == "/v1/charge"
-  input.attributes.request.http.headers["x-user-role"] == "payments"
   jwt_valid
   claims := jwt_claims
   claims.tenant == "acme"
-  claims.merchant_tier == input.attributes.request.http.headers["x-merchant-tier"]
+  claims.merchant_tier != ""
   body := json.unmarshal(input.attributes.request.http.body)
   body.currency == "USD"
-  body.amount <= 1000
+  body.amount <= basic_limit(claims)
   entitlement_allowed(service_spiffe_id, claims, "svc.charge")
   entitlement_allowed(service_spiffe_id, claims, "user.charge.basic")
+}
+
+basic_limit(claims) := 100 {
+  is_data_entry(claims)
+}
+
+basic_limit(claims) := 1000 {
+  not is_data_entry(claims)
+}
+
+is_data_entry(claims) {
+  roles := claims.roles
+  roles[_] == "finance-data-entry"
 }
 
 allow {
   input.attributes.request.http.method == "POST"
   input.attributes.request.http.path == "/v1/charge"
-  input.attributes.request.http.headers["x-user-role"] == "payments"
-  input.attributes.request.http.headers["x-merchant-tier"] == "gold"
   jwt_valid
   claims := jwt_claims
   claims.tenant == "acme"

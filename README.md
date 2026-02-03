@@ -68,43 +68,62 @@ Generate a JWT and store the signing secret in Kubernetes:
 ./scripts/gen-jwt.sh
 ```
 
-Then export the JWT printed by the script:
+Then export the JWTs printed by the script:
 
 ```bash
-export AUTH_TOKEN="..."
+eval "$(./scripts/gen-jwt.sh)"
 ```
 
-Allowed request (silver tier, amount <= 1000):
+Allowed request (basic user, amount <= 100):
 
 ```bash
 curl -s -X POST http://localhost:8080/v1/charge \
   -H 'content-type: application/json' \
-  -H "authorization: Bearer ${AUTH_TOKEN}" \
-  -H 'x-user-role: payments' \
-  -H 'x-merchant-tier: silver' \
-  -d '{"amount":900,"currency":"USD","card_country":"US","merchant_id":"m-123","user_id":"u-456"}' | jq
+  -H "authorization: Bearer ${BASIC_AUTH_TOKEN}" \
+  -d '{"amount":99,"currency":"USD","card_country":"US","merchant_id":"m-123","user_id":"u-456"}'
 ```
 
-Denied by payment OPA (amount too high for non‑gold):
+Denied by payment OPA (basic user over limit):
 
 ```bash
 curl -i -X POST http://localhost:8080/v1/charge \
   -H 'content-type: application/json' \
-  -H "authorization: Bearer ${AUTH_TOKEN}" \
-  -H 'x-user-role: payments' \
-  -H 'x-merchant-tier: silver' \
-  -d '{"amount":2500,"currency":"USD","card_country":"US","merchant_id":"m-123","user_id":"u-456"}'
+  -H "authorization: Bearer ${BASIC_AUTH_TOKEN}" \
+  -d '{"amount":199,"currency":"USD","card_country":"US","merchant_id":"m-123","user_id":"u-456"}'
 ```
 
-Denied by fraud OPA (amount too high for fraud policy):
+Denied by fraud OPA (riskier merchant, low fraud threshold):
 
 ```bash
 curl -i -X POST http://localhost:8080/v1/charge \
   -H 'content-type: application/json' \
-  -H "authorization: Bearer ${AUTH_TOKEN}" \
-  -H 'x-user-role: payments' \
-  -H 'x-merchant-tier: silver' \
-  -d '{"amount":1500,"currency":"USD","card_country":"US","merchant_id":"m-123","user_id":"u-456"}'
+  -H "authorization: Bearer ${ADMIN_AUTH_TOKEN}" \
+  -d '{"amount":600,"currency":"USD","card_country":"US","merchant_id":"m-gambling","user_id":"u-456"}'
+```
+
+Admin succeeds where basic fails (same request, different token):
+
+```bash
+# BASIC (fails)
+curl -i -X POST http://localhost:8080/v1/charge \
+  -H 'content-type: application/json' \
+  -H "authorization: Bearer ${BASIC_AUTH_TOKEN}" \
+  -d '{"amount":199,"currency":"USD","card_country":"US","merchant_id":"m-123","user_id":"u-456"}'
+
+# ADMIN (succeeds)
+curl -i -X POST http://localhost:8080/v1/charge \
+  -H 'content-type: application/json' \
+  -H "authorization: Bearer ${ADMIN_AUTH_TOKEN}" \
+  -d '{"amount":199,"currency":"USD","card_country":"US","merchant_id":"m-123","user_id":"u-456"}'
+```
+
+Admin still fails on m-gambling above $500:
+
+```bash
+curl -i -X POST http://localhost:8080/v1/charge \
+  -H 'content-type: application/json' \
+  -H "authorization: Bearer ${ADMIN_AUTH_TOKEN}" \
+  -d '{"amount":600,"currency":"USD","card_country":"US","merchant_id":"m-gambling","user_id":"u-456"}'
 ```
 
 Check OPA decision logs:
@@ -138,11 +157,13 @@ sequenceDiagram
     PaymentEnvoy->>FraudEnvoy: /v1/score (mTLS)
     FraudEnvoy->>OPA_Fraud: ext_authz (mTLS)
     OPA_Fraud->>EntitlementsEnvoy: /v1/check (mTLS, JWT)
+    EntitlementsEnvoy->>Entitlements: /v1/check
     Entitlements-->>OPA_Fraud: entitlements list
     OPA_Fraud-->>FraudEnvoy: allow/deny
     FraudEnvoy-->>PaymentEnvoy: fraud score
     PaymentEnvoy-->>Client: charge response
 ```
+
 
 ### Identity & Entitlements
 
@@ -182,6 +203,7 @@ If your trust domain is different, update the SPIFFE IDs in:
 - Rego policies live in `policies/payment.rego` and `policies/fraud.rego` and are loaded into ConfigMaps by `scripts/deploy-apps.sh`.
 - For stronger integrity, entitlements could return a signed JWT or a signature over the response body so OPA can verify it and mitigate MITM or DNS spoofing risks.
 - JWT verification secrets are stored in the `jwt-secret` Kubernetes secret and injected into OPA and entitlements via env vars.
+- Fraud calls are required in this lab; `payment` always calls `fraud` for a score.
 
 ## Troubleshooting
 

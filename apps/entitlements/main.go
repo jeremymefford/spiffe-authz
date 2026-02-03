@@ -1,9 +1,6 @@
 package main
 
 import (
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"log"
@@ -11,6 +8,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/golang-jwt/jwt/v5"
 )
 
 type CheckRequest struct {
@@ -28,7 +27,7 @@ type Claims struct {
 	Tenant       string   `json:"tenant"`
 	MerchantTier string   `json:"merchant_tier"`
 	MFA          bool     `json:"mfa"`
-	Exp          int64    `json:"exp"`
+	jwt.RegisteredClaims
 }
 
 func main() {
@@ -104,6 +103,7 @@ func roleEntitlementsFor(roles []string) []string {
 	entitlements := make([]string, 0)
 	roleEntitlements := map[string][]string{
 		"finance-admin": {"user.charge.basic", "user.charge.high", "user.fraud.score.basic", "user.fraud.score.high", "user.refunds"},
+		"finance-data-entry": {"user.charge.basic", "user.fraud.score.basic"},
 		"risk": {"user.fraud.score.high"},
 	}
 	for _, role := range roles {
@@ -134,63 +134,21 @@ func unique(values []string) []string {
 }
 
 func verifyJWT(token string, secret []byte) (Claims, error) {
-	var claims Claims
-	parts := splitToken(token)
-	if len(parts) != 3 {
-		return claims, errInvalidToken
-	}
-
-	if !verifyHS256(parts[0], parts[1], parts[2], secret) {
-		return claims, errInvalidToken
-	}
-
-	payload, err := decodeSegment(parts[1])
+	claims := Claims{}
+	parser := jwt.NewParser(jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}))
+	parsed, err := parser.ParseWithClaims(token, &claims, func(t *jwt.Token) (any, error) {
+		return secret, nil
+	})
 	if err != nil {
-		return claims, errInvalidToken
-	}
-
-	if err := json.Unmarshal(payload, &claims); err != nil {
-		return claims, errInvalidToken
-	}
-
-	if claims.Exp > 0 && time.Now().Unix() > claims.Exp {
-		return claims, errExpiredToken
-	}
-
-	return claims, nil
-}
-
-func splitToken(token string) []string {
-	out := make([]string, 0, 3)
-	start := 0
-	for i := 0; i < len(token); i++ {
-		if token[i] == '.' {
-			out = append(out, token[start:i])
-			start = i + 1
+		if errors.Is(err, jwt.ErrTokenExpired) {
+			return Claims{}, errExpiredToken
 		}
+		return Claims{}, errInvalidToken
 	}
-	out = append(out, token[start:])
-	return out
-}
-
-func verifyHS256(header, payload, sig string, secret []byte) bool {
-	mac := hmac.New(sha256.New, secret)
-	mac.Write([]byte(header))
-	mac.Write([]byte("."))
-	mac.Write([]byte(payload))
-	expected := mac.Sum(nil)
-	decoded, err := decodeSegment(sig)
-	if err != nil {
-		return false
+	if !parsed.Valid {
+		return Claims{}, errInvalidToken
 	}
-	return hmac.Equal(decoded, expected)
-}
-
-func decodeSegment(seg string) ([]byte, error) {
-	if l := len(seg) % 4; l > 0 {
-		seg += strings.Repeat("=", 4-l)
-	}
-	return base64.URLEncoding.DecodeString(seg)
+	return claims, nil
 }
 
 func bearerToken(header string) string {
