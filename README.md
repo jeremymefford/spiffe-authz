@@ -160,6 +160,8 @@ sequenceDiagram
     EntitlementsEnvoy->>Entitlements: /v1/check
     Entitlements-->>OPA_Fraud: entitlements list
     OPA_Fraud-->>FraudEnvoy: allow/deny
+    FraudEnvoy->>Fraud: /v1/score
+    Fraud-->>FraudEnvoy: risk score
     FraudEnvoy-->>PaymentEnvoy: fraud score
     PaymentEnvoy-->>Client: charge response
 ```
