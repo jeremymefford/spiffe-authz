@@ -1,0 +1,148 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fraud-config
+  namespace: lab
+data:
+  envoy.yaml: |
+    node:
+      id: fraud
+      cluster: fraud
+    static_resources:
+      listeners:
+      - name: inbound
+        address:
+          socket_address:
+            address: 0.0.0.0
+            port_value: 8080
+        filter_chains:
+        - transport_socket:
+            name: envoy.transport_sockets.tls
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.DownstreamTlsContext
+              require_client_certificate: true
+              common_tls_context:
+                tls_certificate_sds_secret_configs:
+                - name: spiffe://example.org/ns/lab/sa/fraud
+                  sds_config:
+                    api_config_source:
+                      api_type: GRPC
+                      grpc_services:
+                      - envoy_grpc:
+                          cluster_name: spire_agent
+                      transport_api_version: V3
+                combined_validation_context:
+                  default_validation_context:
+                    match_subject_alt_names:
+                    - exact: spiffe://example.org/ns/lab/sa/payment
+                  validation_context_sds_secret_config:
+                    name: spiffe://example.org
+                    sds_config:
+                      api_config_source:
+                        api_type: GRPC
+                        grpc_services:
+                        - envoy_grpc:
+                            cluster_name: spire_agent
+                        transport_api_version: V3
+          filters:
+          - name: envoy.filters.network.http_connection_manager
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+              stat_prefix: inbound_http
+              route_config:
+                name: local_route
+                virtual_hosts:
+                - name: fraud
+                  domains: ["*"]
+                  routes:
+                  - match:
+                      prefix: "/"
+                    route:
+                      cluster: fraud_app
+              http_filters:
+              - name: envoy.filters.http.ext_authz
+                typed_config:
+                  "@type": type.googleapis.com/envoy.extensions.filters.http.ext_authz.v3.ExtAuthz
+                  grpc_service:
+                    envoy_grpc:
+                      cluster_name: opa
+                  transport_api_version: V3
+                  with_request_body:
+                    max_request_bytes: 8192
+                    allow_partial_message: true
+              - name: envoy.filters.http.router
+                typed_config:
+                  "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
+      clusters:
+      - name: fraud_app
+        connect_timeout: 0.25s
+        type: STATIC
+        lb_policy: ROUND_ROBIN
+        load_assignment:
+          cluster_name: fraud_app
+          endpoints:
+          - lb_endpoints:
+            - endpoint:
+                address:
+                  socket_address:
+                    address: 127.0.0.1
+                    port_value: 8082
+      - name: opa
+        connect_timeout: 0.25s
+        type: STATIC
+        lb_policy: ROUND_ROBIN
+        http2_protocol_options: {}
+        load_assignment:
+          cluster_name: opa
+          endpoints:
+          - lb_endpoints:
+            - endpoint:
+                address:
+                  socket_address:
+                    address: 127.0.0.1
+                    port_value: 9191
+      - name: spire_agent
+        connect_timeout: 0.25s
+        http2_protocol_options: {}
+        load_assignment:
+          cluster_name: spire_agent
+          endpoints:
+          - lb_endpoints:
+            - endpoint:
+                address:
+                  pipe:
+                    path: /spiffe-workload-api/spire-agent.sock
+    admin:
+      access_log_path: /tmp/admin_access.log
+      address:
+        socket_address:
+          address: 0.0.0.0
+          port_value: 9901
+  policy.rego: |
+    package envoy.authz
+
+    default allow = false
+
+    allow {
+      input.attributes.request.http.method == "GET"
+      input.attributes.request.http.path == "/v1/health"
+    }
+
+    allow {
+      input.attributes.request.http.method == "POST"
+      input.attributes.request.http.path == "/v1/score"
+      input.attributes.source.principal == "spiffe://example.org/ns/lab/sa/payment"
+      input.attributes.request.http.headers["x-user-role"] == "payments"
+      body := json.unmarshal(input.attributes.request.http.body)
+      body.amount <= 2000
+    }
+
+    allow {
+      input.attributes.request.http.method == "POST"
+      input.attributes.request.http.path == "/v1/score"
+      input.attributes.source.principal == "spiffe://example.org/ns/lab/sa/payment"
+      input.attributes.request.http.headers["x-user-role"] == "payments"
+      input.attributes.request.http.headers["x-merchant-tier"] == "gold"
+      body := json.unmarshal(input.attributes.request.http.body)
+      body.amount <= 5000
+    }

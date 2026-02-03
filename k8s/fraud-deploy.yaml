@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fraud
+  namespace: lab
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: fraud
+  template:
+    metadata:
+      labels:
+        app: fraud
+    spec:
+      serviceAccountName: fraud
+      volumes:
+      - name: config
+        configMap:
+          name: fraud-config
+      - name: spiffe-workload-api
+        csi:
+          driver: csi.spiffe.io
+          readOnly: true
+      containers:
+      - name: fraud
+        image: fraud:local
+        imagePullPolicy: IfNotPresent
+        env:
+        - name: PORT
+          value: "8082"
+        ports:
+        - containerPort: 8082
+      - name: envoy
+        image: envoyproxy/envoy:v1.28.2
+        imagePullPolicy: IfNotPresent
+        args:
+        - -c
+        - /etc/envoy/envoy.yaml
+        - --log-level
+        - info
+        ports:
+        - containerPort: 8080
+        - containerPort: 9901
+        volumeMounts:
+        - name: config
+          mountPath: /etc/envoy/envoy.yaml
+          subPath: envoy.yaml
+        - name: spiffe-workload-api
+          mountPath: /spiffe-workload-api
+      - name: opa
+        image: openpolicyagent/opa:0.63.0-envoy
+        imagePullPolicy: IfNotPresent
+        args:
+        - run
+        - --server
+        - --set=plugins.envoy_ext_authz_grpc.addr=:9191
+        - --set=decision_logs.console=true
+        - /policies
+        volumeMounts:
+        - name: config
+          mountPath: /policies/policy.rego
+          subPath: policy.rego
