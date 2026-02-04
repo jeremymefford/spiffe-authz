@@ -14,10 +14,15 @@ spec:
         app: payment
     spec:
       serviceAccountName: payment
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
       volumes:
       - name: config
         configMap:
           name: payment-config
+      - name: tmp
+        emptyDir: {}
       - name: spiffe-workload-api
         csi:
           driver: csi.spiffe.io
@@ -26,6 +31,12 @@ spec:
       - name: payment
         image: payment:local
         imagePullPolicy: IfNotPresent
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
         env:
         - name: PORT
           value: "8081"
@@ -33,9 +44,35 @@ spec:
           value: "http://127.0.0.1:15001"
         ports:
         - containerPort: 8081
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        readinessProbe:
+          httpGet:
+            path: /v1/health
+            port: 8081
+          initialDelaySeconds: 2
+          periodSeconds: 5
+          timeoutSeconds: 2
+          failureThreshold: 3
+        livenessProbe:
+          httpGet:
+            path: /v1/health
+            port: 8081
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 2
+          failureThreshold: 3
       - name: envoy
         image: envoyproxy/envoy:v1.28.2
         imagePullPolicy: IfNotPresent
+        command: ["/usr/local/bin/envoy"]
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
         args:
         - -c
         - /etc/envoy/envoy.yaml
@@ -49,5 +86,23 @@ spec:
         - name: config
           mountPath: /etc/envoy/envoy.yaml
           subPath: envoy.yaml
+        - name: tmp
+          mountPath: /tmp
         - name: spiffe-workload-api
           mountPath: /spiffe-workload-api
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 9901
+          initialDelaySeconds: 3
+          periodSeconds: 5
+          timeoutSeconds: 2
+          failureThreshold: 3
+        livenessProbe:
+          httpGet:
+            path: /ready
+            port: 9901
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 2
+          failureThreshold: 3

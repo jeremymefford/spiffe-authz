@@ -14,6 +14,9 @@ spec:
         app: opa-payment
     spec:
       serviceAccountName: opa-payment
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
       volumes:
       - name: config
         configMap:
@@ -21,6 +24,8 @@ spec:
       - name: policy
         configMap:
           name: opa-payment-policy
+      - name: tmp
+        emptyDir: {}
       - name: spiffe-workload-api
         csi:
           driver: csi.spiffe.io
@@ -29,6 +34,12 @@ spec:
       - name: opa
         image: openpolicyagent/opa:0.63.0-envoy
         imagePullPolicy: IfNotPresent
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
         env:
         - name: JWT_SECRET
           valueFrom:
@@ -47,9 +58,34 @@ spec:
         - name: policy
           mountPath: /policies/policy.rego
           subPath: policy.rego
+        - name: tmp
+          mountPath: /tmp
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8181
+          initialDelaySeconds: 2
+          periodSeconds: 5
+          timeoutSeconds: 2
+          failureThreshold: 3
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8181
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 2
+          failureThreshold: 3
       - name: envoy
         image: envoyproxy/envoy:v1.28.2
         imagePullPolicy: IfNotPresent
+        command: ["/usr/local/bin/envoy"]
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
         args:
         - -c
         - /etc/envoy/envoy.yaml
@@ -63,5 +99,23 @@ spec:
         - name: config
           mountPath: /etc/envoy/envoy.yaml
           subPath: envoy.yaml
+        - name: tmp
+          mountPath: /tmp
         - name: spiffe-workload-api
           mountPath: /spiffe-workload-api
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 9901
+          initialDelaySeconds: 3
+          periodSeconds: 5
+          timeoutSeconds: 2
+          failureThreshold: 3
+        livenessProbe:
+          httpGet:
+            path: /ready
+            port: 9901
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 2
+          failureThreshold: 3
