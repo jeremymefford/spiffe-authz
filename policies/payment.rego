@@ -97,7 +97,7 @@ req_body := json.unmarshal(input.attributes.request.http.body)
 
 service_spiffe_id := "spiffe://example.org/ns/lab/sa/payment"
 
-jwt_secret := opa.runtime().env.JWT_SECRET
+jwt_cert := opa.runtime().env.JWT_CERT
 
 token := t {
   auth := input.attributes.request.http.headers["authorization"]
@@ -107,10 +107,10 @@ token := t {
   t := parts[1]
 }
 
-jwt := io.jwt.decode_verify(token, {"secret": jwt_secret, "alg": "HS256"})
+jwt := io.jwt.decode_verify(token, {"cert": jwt_cert, "alg": "ES256"})
 
 jwt_valid {
-  jwt_secret != ""
+  jwt_cert != ""
   jwt[0]
 }
 

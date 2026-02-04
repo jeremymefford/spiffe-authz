@@ -1,7 +1,10 @@
 package main
 
 import (
+	"crypto/ecdsa"
+	"crypto/x509"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"log"
 	"net/http"
@@ -32,7 +35,11 @@ type Claims struct {
 
 func main() {
 	port := envOr("PORT", "8083")
-	jwtSecret := mustEnv("JWT_SECRET")
+	jwtCert := mustEnv("JWT_CERT")
+	pubKey, err := publicKeyFromCert(jwtCert)
+	if err != nil {
+		log.Fatalf("invalid JWT_CERT: %v", err)
+	}
 
 	spiffeEntitlements := map[string][]string{
 		// Service-level entitlements (who can call what).
@@ -70,9 +77,10 @@ func main() {
 			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "missing spiffe id"})
 			return
 		}
-		if req.SpiffeID != "" && req.SpiffeID != callerSpiffeID {
-			log.Printf("entitlements denied request_id=%s spiffe_id=%s error=spiffe_mismatch caller_spiffe_id=%s",
-				requestID, req.SpiffeID, callerSpiffeID)
+		effectiveSpiffeID, err := resolveSpiffeID(callerSpiffeID, req.SpiffeID)
+		if err != nil {
+			log.Printf("entitlements denied request_id=%s spiffe_id=%s error=%s caller_spiffe_id=%s",
+				requestID, req.SpiffeID, err.Error(), callerSpiffeID)
 			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "spiffe id mismatch"})
 			return
 		}
@@ -86,18 +94,18 @@ func main() {
 			return
 		}
 
-		claims, err := verifyJWT(token, []byte(jwtSecret))
+		claims, err := verifyJWT(token, pubKey)
 		if err != nil {
 			log.Printf("entitlements denied request_id=%s spiffe_id=%s error=%s token_len=%d", requestID, req.SpiffeID, err.Error(), len(token))
 			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid token"})
 			return
 		}
 
-		entitlements := mergeEntitlements(spiffeEntitlements[callerSpiffeID], roleEntitlementsFor(claims.Roles))
+		entitlements := mergeEntitlements(spiffeEntitlements[effectiveSpiffeID], roleEntitlementsFor(claims.Roles))
 		entitlements = unique(entitlements)
 
 		log.Printf("entitlements request_id=%s spiffe_id=%s sub=%s tenant=%s roles=%v entitlements=%v",
-			requestID, callerSpiffeID, claims.Sub, claims.Tenant, claims.Roles, entitlements)
+			requestID, effectiveSpiffeID, claims.Sub, claims.Tenant, claims.Roles, entitlements)
 
 		writeJSON(w, http.StatusOK, CheckResponse{Entitlements: entitlements})
 	})
@@ -146,11 +154,11 @@ func unique(values []string) []string {
 	return out
 }
 
-func verifyJWT(token string, secret []byte) (Claims, error) {
+func verifyJWT(token string, key *ecdsa.PublicKey) (Claims, error) {
 	claims := Claims{}
-	parser := jwt.NewParser(jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}))
+	parser := jwt.NewParser(jwt.WithValidMethods([]string{jwt.SigningMethodES256.Alg()}))
 	parsed, err := parser.ParseWithClaims(token, &claims, func(t *jwt.Token) (any, error) {
-		return secret, nil
+		return key, nil
 	})
 	if err != nil {
 		if errors.Is(err, jwt.ErrTokenExpired) {
@@ -162,6 +170,22 @@ func verifyJWT(token string, secret []byte) (Claims, error) {
 		return Claims{}, errInvalidToken
 	}
 	return claims, nil
+}
+
+func publicKeyFromCert(certPEM string) (*ecdsa.PublicKey, error) {
+	block, _ := pem.Decode([]byte(certPEM))
+	if block == nil {
+		return nil, errors.New("invalid pem")
+	}
+	cert, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		return nil, err
+	}
+	key, ok := cert.PublicKey.(*ecdsa.PublicKey)
+	if !ok {
+		return nil, errors.New("certificate does not contain ecdsa public key")
+	}
+	return key, nil
 }
 
 func bearerToken(header string) string {
@@ -194,6 +218,25 @@ func spiffeIDFromXFCC(header string) string {
 		}
 	}
 	return ""
+}
+
+func resolveSpiffeID(caller, requested string) (string, error) {
+	if requested == "" || requested == caller {
+		return caller, nil
+	}
+
+	switch caller {
+	case "spiffe://example.org/ns/lab/sa/opa-payment":
+		if requested == "spiffe://example.org/ns/lab/sa/payment" {
+			return requested, nil
+		}
+	case "spiffe://example.org/ns/lab/sa/opa-fraud":
+		if requested == "spiffe://example.org/ns/lab/sa/payment" {
+			return requested, nil
+		}
+	}
+
+	return "", errors.New("spiffe_mismatch")
 }
 
 var errInvalidToken = errors.New("invalid token")

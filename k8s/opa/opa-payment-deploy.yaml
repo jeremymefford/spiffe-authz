@@ -41,11 +41,11 @@ spec:
             drop:
             - ALL
         env:
-        - name: JWT_SECRET
+        - name: JWT_CERT
           valueFrom:
             secretKeyRef:
-              name: jwt-secret
-              key: secret
+              name: jwt-cert
+              key: cert.pem
         args:
         - run
         - --server

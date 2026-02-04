@@ -65,7 +65,7 @@ kubectl -n lab port-forward svc/payment 8080:8080
 ```
 
 
-Generate a JWT, store the signing secret in Kubernetes, and export the JWTs printed by the script:
+Generate ES256 JWTs, store the public signing certificate in Kubernetes, and export the JWTs printed by the script:
 
 ```bash
 eval "$(./scripts/gen-jwt.sh)"
