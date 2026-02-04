@@ -39,7 +39,7 @@ spec:
             - ALL
         env:
         - name: PORT
-          value: "8083"
+          value: "127.0.0.1:8083"
         - name: JWT_CERT
           valueFrom:
             secretKeyRef:

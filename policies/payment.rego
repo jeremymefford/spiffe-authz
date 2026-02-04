@@ -91,6 +91,13 @@ valid_claims {
   c := jwt_claims
   c.tenant == "acme"
   c.merchant_tier != ""
+  token_not_expired(c)
+}
+
+token_not_expired(c) {
+  exp := c.exp
+  exp != 0
+  time.now_ns() < exp * 1000000000
 }
 
 req_body := json.unmarshal(input.attributes.request.http.body)

@@ -23,6 +23,8 @@ Services:
 - `kind`
 - `kubectl`
 - `helm`
+- `python3` (for JWT generation)
+- `openssl` (for ES256 signing)
 
 ## Quickstart
 
@@ -169,7 +171,7 @@ sequenceDiagram
 ```mermaid
 flowchart LR
     A[SPIFFE ID<br/>spiffe://example.org/ns/lab/sa/payment] --> B[Service Entitlements<br/>svc.charge, svc.fraud.score]
-    C[JWT Claims<br/>roles: payments, tenant: acme, mfa: true] --> D[Role Entitlements<br/>user.charge.basic, user.fraud.score.basic]
+    C[JWT Claims<br/>roles: finance-data-entry|finance-admin, tenant: acme, mfa: true] --> D[Role Entitlements<br/>user.charge.basic, user.fraud.score.basic]
     B --> E[OPA Policy Decision]
     D --> E
     E --> F[ALLOW / DENY]
@@ -195,4 +197,4 @@ The lab assumes the SPIRE trust domain is `example.org` and registers:
 - OPA policies inspect JWT claims and JSON request bodies to enforce business rules and entitlements.
 - Rego policies live in `policies/payment.rego` and `policies/fraud.rego` and are loaded into ConfigMaps by `scripts/deploy-apps.sh`.
 - For stronger integrity, entitlements could return a signed JWT or a signature over the response body so OPA can verify it and mitigate MITM or DNS spoofing risks.
-- JWT verification secrets are stored in the `jwt-secret` Kubernetes secret and injected into OPA and entitlements via env vars.
+- JWT verification certificates are stored in the `jwt-cert` Kubernetes secret and injected into OPA and entitlements via env vars.

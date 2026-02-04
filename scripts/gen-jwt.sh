@@ -1,6 +1,17 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+require_cmd() {
+  if ! command -v "$1" >/dev/null 2>&1; then
+    echo "Missing required command: $1" >&2
+    exit 1
+  fi
+}
+
+require_cmd openssl
+require_cmd python3
+require_cmd kubectl
+
 tmpdir=$(mktemp -d)
 trap 'rm -rf "${tmpdir}"' EXIT
 

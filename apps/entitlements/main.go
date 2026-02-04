@@ -34,7 +34,7 @@ type Claims struct {
 }
 
 func main() {
-	port := envOr("PORT", "8083")
+	port := envOr("PORT", "127.0.0.1:8083")
 	jwtCert := mustEnv("JWT_CERT")
 	pubKey, err := publicKeyFromCert(jwtCert)
 	if err != nil {
@@ -48,6 +48,17 @@ func main() {
 			"svc.fraud.score",
 		},
 		"spiffe://example.org/ns/lab/sa/fraud": {},
+	}
+	allowedDelegates := map[string][]string{
+		"spiffe://example.org/ns/lab/sa/opa-payment": {"spiffe://example.org/ns/lab/sa/payment"},
+		"spiffe://example.org/ns/lab/sa/opa-fraud": {"spiffe://example.org/ns/lab/sa/payment"},
+	}
+	if raw := os.Getenv("ENTITLEMENTS_DELEGATES"); raw != "" {
+		var overrides map[string][]string
+		if err := json.Unmarshal([]byte(raw), &overrides); err != nil {
+			log.Fatalf("invalid ENTITLEMENTS_DELEGATES: %v", err)
+		}
+		allowedDelegates = overrides
 	}
 
 
@@ -77,7 +88,7 @@ func main() {
 			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "missing spiffe id"})
 			return
 		}
-		effectiveSpiffeID, err := resolveSpiffeID(callerSpiffeID, req.SpiffeID)
+		effectiveSpiffeID, err := resolveSpiffeID(callerSpiffeID, req.SpiffeID, allowedDelegates)
 		if err != nil {
 			log.Printf("entitlements denied request_id=%s spiffe_id=%s error=%s caller_spiffe_id=%s",
 				requestID, req.SpiffeID, err.Error(), callerSpiffeID)
@@ -220,19 +231,16 @@ func spiffeIDFromXFCC(header string) string {
 	return ""
 }
 
-func resolveSpiffeID(caller, requested string) (string, error) {
+func resolveSpiffeID(caller, requested string, allowedDelegates map[string][]string) (string, error) {
 	if requested == "" || requested == caller {
 		return caller, nil
 	}
 
-	switch caller {
-	case "spiffe://example.org/ns/lab/sa/opa-payment":
-		if requested == "spiffe://example.org/ns/lab/sa/payment" {
-			return requested, nil
-		}
-	case "spiffe://example.org/ns/lab/sa/opa-fraud":
-		if requested == "spiffe://example.org/ns/lab/sa/payment" {
-			return requested, nil
+	if delegates, ok := allowedDelegates[caller]; ok {
+		for _, allowed := range delegates {
+			if requested == allowed {
+				return requested, nil
+			}
 		}
 	}
 

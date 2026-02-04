@@ -109,10 +109,7 @@ func fetchFraudScore(r *http.Request, url string, payload FraudScoreRequest) (*F
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	// propagate context headers for OPA decisions
-	copyHeader(r, req, "x-user-role")
-	copyHeader(r, req, "x-merchant-tier")
-	copyHeader(r, req, "x-transaction-id")
+	// propagate auth header for downstream policy decisions
 	copyHeader(r, req, "authorization")
 
 	client := &http.Client{Timeout: 3 * time.Second}
