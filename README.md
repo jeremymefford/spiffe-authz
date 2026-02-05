@@ -2,6 +2,21 @@
 
 _OpenAI's Codex was heavily used in creating this lab_
 
+## Overview
+This lab aims to help illustrate how AuthZ enforcment can be a platform responsibility rather than an application code responsibility. It uses Envoy's ext_authz plugin to push decision making to OPA. This is a highly scalable way to enforce intelligent authorization at runtime within the service mesh.
+
+It differs from traditional intentions based mesh authz approaches as the OPA decision code has the full context of the HTTP request rather than just knowing source / destination / URI. This means OPA decisions can be based on the request body, the authorization header, or even by sourcing additional metadata from an external service. This lab showcases this with a very simple "entitlement service" that stores additional metadata and mapping of JWT claims to roles. Using OPA in this way is not mutually exclusive with other service mesh ways of doing authz and they can work in concert (mesh does simple intentions based networking and OPA is only used when more intelligent based rules are needed).
+
+The idea is that application teams would still own the "rules of engagement" with their applications by owning the rego code that OPA executes. The platform would pull those rules in via the deployment pipeline and push them out to the running OPA agents. Therefore the platform owns rule enforcement, but the app teams own the rules. This also has the side benefit of being able to update authz rules without having to redeploy the application, all that needs to be updated are the rules in the corollary OPA.
+
+This could be implemented in a brown-field as long as the envoy service mesh can be established with the OPA plugin. Once that plumbing is in place, rules can be added one at a time until eventually the entire authz ruleset exists in rego.
+
+Another benefit of this approach is that OPA logs every decision. Being able to audit and attest authz decisions across an entire compute estate is a huge win for many regulated industries. Today there is very little tooling / support for this.
+
+While rego isn't a perfect language and will likely break down in some very complex authz decisions, the app teams can always fail back to authz rules in code. However with this approach, there's now a standard policy language across all app teams for authz. In larger companies where polyglot development is common, this is a huge win for consistency and enables security teams to scale audits across all applications.
+
+## Setup
+
 This lab spins up a local k8s environment that demonstrates:
 
 - SPIRE issuing SPIFFE identities to workloads
@@ -128,8 +143,8 @@ curl -i -X POST http://localhost:8080/v1/charge \
 Check OPA decision logs:
 
 ```bash
-kubectl -n lab logs deploy/opa-payment -c opa --tail=5
-kubectl -n lab logs deploy/opa-fraud -c opa --tail=5
+kubectl -n lab logs deploy/opa-payment -c opa --tail=100 | grep decision_id | jq
+kubectl -n lab logs deploy/opa-fraud -c opa --tail=100 | grep decision_id | jq
 ```
 
 ## Architecture
