@@ -16,8 +16,8 @@ import (
 )
 
 type CheckRequest struct {
-	SpiffeID    string `json:"spiffe_id"`
-	Token       string `json:"token"`
+	SpiffeID string `json:"spiffe_id"`
+	Token    string `json:"token"`
 }
 
 type CheckResponse struct {
@@ -51,7 +51,7 @@ func main() {
 	}
 	allowedDelegates := map[string][]string{
 		"spiffe://example.org/ns/lab/sa/opa-payment": {"spiffe://example.org/ns/lab/sa/payment"},
-		"spiffe://example.org/ns/lab/sa/opa-fraud": {"spiffe://example.org/ns/lab/sa/payment"},
+		"spiffe://example.org/ns/lab/sa/opa-fraud":   {"spiffe://example.org/ns/lab/sa/payment"},
 	}
 	if raw := os.Getenv("ENTITLEMENTS_DELEGATES"); raw != "" {
 		var overrides map[string][]string
@@ -60,7 +60,6 @@ func main() {
 		}
 		allowedDelegates = overrides
 	}
-
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/v1/health", func(w http.ResponseWriter, r *http.Request) {
@@ -134,9 +133,9 @@ func main() {
 func roleEntitlementsFor(roles []string) []string {
 	entitlements := make([]string, 0)
 	roleEntitlements := map[string][]string{
-		"finance-admin": {"user.charge.basic", "user.charge.high", "user.fraud.score.basic", "user.fraud.score.high", "user.refunds"},
+		"finance-admin":      {"user.charge.basic", "user.charge.high", "user.fraud.score.basic", "user.fraud.score.high", "user.refunds"},
 		"finance-data-entry": {"user.charge.basic", "user.fraud.score.basic"},
-		"risk": {"user.fraud.score.high"},
+		"risk":               {"user.fraud.score.high"},
 	}
 	for _, role := range roles {
 		entitlements = append(entitlements, roleEntitlements[role]...)

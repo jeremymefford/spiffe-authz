@@ -140,6 +140,7 @@ kubectl -n lab logs deploy/opa-fraud -c opa --tail=5
 sequenceDiagram
     participant Client
     participant PaymentEnvoy
+    participant Payment
     participant OPA_Payment
     participant EntitlementsEnvoy
     participant Entitlements
@@ -153,7 +154,8 @@ sequenceDiagram
     EntitlementsEnvoy->>Entitlements: /v1/check
     Entitlements-->>OPA_Payment: entitlements list
     OPA_Payment-->>PaymentEnvoy: allow/deny
-    PaymentEnvoy->>FraudEnvoy: /v1/score (mTLS)
+    PaymentEnvoy->>Payment: /v1/charge
+    Payment->>FraudEnvoy: /v1/score (mTLS)
     FraudEnvoy->>OPA_Fraud: ext_authz (mTLS)
     OPA_Fraud->>EntitlementsEnvoy: /v1/check (mTLS, JWT)
     EntitlementsEnvoy->>Entitlements: /v1/check
@@ -161,7 +163,8 @@ sequenceDiagram
     OPA_Fraud-->>FraudEnvoy: allow/deny
     FraudEnvoy->>Fraud: /v1/score
     Fraud-->>FraudEnvoy: risk score
-    FraudEnvoy-->>PaymentEnvoy: fraud score
+    FraudEnvoy-->>Payment: fraud score
+    Payment-->>PaymentEnvoy: charge response
     PaymentEnvoy-->>Client: charge response
 ```
 
@@ -170,11 +173,11 @@ sequenceDiagram
 
 ```mermaid
 flowchart LR
-    A[SPIFFE ID<br/>spiffe://example.org/ns/lab/sa/payment] --> B[Service Entitlements<br/>svc.charge, svc.fraud.score]
-    C[JWT Claims<br/>roles: finance-data-entry|finance-admin, tenant: acme, mfa: true] --> D[Role Entitlements<br/>user.charge.basic, user.fraud.score.basic]
-    B --> E[OPA Policy Decision]
+    A["SPIFFE ID<br/>spiffe://example.org/ns/lab/sa/payment"] --> B["Service Entitlements<br/>svc.charge, svc.fraud.score"]
+    C["JWT Claims<br/>roles: finance-data-entry, finance-admin<br/>tenant: acme, mfa: true"] --> D["Role Entitlements<br/>user.charge.basic, user.fraud.score.basic"]
+    B --> E["OPA Policy Decision"]
     D --> E
-    E --> F[ALLOW / DENY]
+    E --> F["ALLOW / DENY"]
 ```
 
 ## SPIFFE IDs
