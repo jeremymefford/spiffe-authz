@@ -3,17 +3,17 @@
 _OpenAI's Codex was heavily used in creating this lab_
 
 ## Overview
-This lab aims to help illustrate how AuthZ enforcment can be a platform responsibility rather than an application code responsibility. It uses Envoy's ext_authz plugin to push decision making to OPA. This is a highly scalable way to enforce intelligent authorization at runtime within the service mesh.
+This lab illustrates how authz enforcement can be a platform responsibility rather than an application‑code responsibility. It uses Envoy's `ext_authz` plugin to push decision‑making to OPA. This is a highly scalable way to enforce intelligent authorization at runtime within a service mesh.
 
-It differs from traditional intentions based mesh authz approaches as the OPA decision code has the full context of the HTTP request rather than just knowing source / destination / URI. This means OPA decisions can be based on the request body, the authorization header, or even by sourcing additional metadata from an external service. This lab showcases this with a very simple "entitlement service" that stores additional metadata and mapping of JWT claims to roles. Using OPA in this way is not mutually exclusive with other service mesh ways of doing authz and they can work in concert (mesh does simple intentions based networking and OPA is only used when more intelligent based rules are needed).
+It differs from traditional intention‑based mesh authz approaches because OPA evaluates the full HTTP request context rather than just source / destination / URI. That means decisions can use the request body, the authorization header, or metadata from an external service. This lab showcases that with a simple entitlements service that stores additional metadata and maps JWT claims to roles. Using OPA this way is not mutually exclusive with other service‑mesh authz; they can work in concert (the mesh handles coarse‑grained intent policy, and OPA handles finer‑grained rules).
 
-The idea is that application teams would still own the "rules of engagement" with their applications by owning the rego code that OPA executes. The platform would pull those rules in via the deployment pipeline and push them out to the running OPA agents. Therefore the platform owns rule enforcement, but the app teams own the rules. This also has the side benefit of being able to update authz rules without having to redeploy the application, all that needs to be updated are the rules in the corollary OPA.
+Application teams still own the "rules of engagement" by owning the Rego policy that OPA executes. The platform pulls those rules through the deployment pipeline and pushes them to running OPA agents. The platform owns enforcement, but the app teams own the rules. This also has the side benefit of updating authz rules without redeploying the application — only the corresponding OPA policies need to change.
 
-This could be implemented in a brown-field as long as the envoy service mesh can be established with the OPA plugin. Once that plumbing is in place, rules can be added one at a time until eventually the entire authz ruleset exists in rego.
+This can be implemented in a brownfield environment as long as an Envoy service mesh can be established with the OPA plugin. Once that plumbing is in place, rules can be added incrementally until the entire authz ruleset lives in Rego.
 
-Another benefit of this approach is that OPA logs every decision. Being able to audit and attest authz decisions across an entire compute estate is a huge win for many regulated industries. Today there is very little tooling / support for this.
+Another benefit of this approach is that OPA logs every decision. Being able to audit and attest authz decisions across an entire compute environment is a big win for many regulated industries. Today there is very little tooling or support for this.
 
-While rego isn't a perfect language and will likely break down in some very complex authz decisions, the app teams can always fail back to authz rules in code. However with this approach, there's now a standard policy language across all app teams for authz. In larger companies where polyglot development is common, this is a huge win for consistency and enables security teams to scale audits across all applications.
+While Rego isn't a perfect language and will likely break down in very complex authz decisions, app teams can always fall back to authz rules in code. However, this approach provides a standard policy language across teams. In larger companies where polyglot development is common, that consistency helps security teams scale audits across all applications.
 
 ## Setup
 

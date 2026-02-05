@@ -136,6 +136,8 @@ entitlement_allowed(spiffe_id, entitlement) {
     },
     "body": {"spiffe_id": spiffe_id, "token": token},
     "timeout": "1s",
+    "force_cache": true,
+    "force_cache_duration_seconds": 30,
   })
   resp.status_code == 200
   entitlements := resp.body.entitlements
