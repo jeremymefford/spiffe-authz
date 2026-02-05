@@ -1,4 +1,4 @@
-# SPIRE + SPIFFE + Envoy + OPA lab
+# Envoy + OPA lab
 
 _OpenAI's Codex was heavily used in creating this lab_
 
@@ -61,13 +61,23 @@ Services:
 ./scripts/build-images.sh
 ```
 
-4. Deploy apps and config
+4. Generate JWTs and publish the signing certificate
+
+This creates the `jwt-cert` Kubernetes secret and prints two JWTs for your shell.
+OPA and entitlements read `JWT_CERT` at startup, so this must happen before
+deploying them (or you must restart those pods after running it).
+
+```bash
+eval "$(./scripts/gen-jwt.sh)"
+```
+
+5. Deploy apps and config
 
 ```bash
 ./scripts/deploy-apps.sh
 ```
 
-5. Register SPIFFE IDs for the workloads
+6. Register SPIFFE IDs for the workloads
 
 ```bash
 ./scripts/register-entries.sh
@@ -75,17 +85,10 @@ Services:
 
 ## Try it
 
-Port‑forward the payment service:
+**In another shell**, port‑forward the payment service:
 
 ```bash
 kubectl -n lab port-forward svc/payment 8080:8080
-```
-
-
-Generate ES256 JWTs, store the public signing certificate in Kubernetes, and export the JWTs printed by the script:
-
-```bash
-eval "$(./scripts/gen-jwt.sh)"
 ```
 
 Allowed request (basic user, amount <= 100):
