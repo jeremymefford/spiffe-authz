@@ -34,7 +34,10 @@ type Claims struct {
 }
 
 func main() {
-	port := envOr("PORT", "127.0.0.1:8083")
+	addr := envOr("PORT", "127.0.0.1:8083")
+	if !strings.Contains(addr, ":") {
+		addr = ":" + addr
+	}
 	jwtCert := mustEnv("JWT_CERT")
 	pubKey, err := publicKeyFromCert(jwtCert)
 	if err != nil {
@@ -121,12 +124,12 @@ func main() {
 	})
 
 	srv := &http.Server{
-		Addr:              ":" + port,
+		Addr:              addr,
 		Handler:           logRequests(mux),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
-	log.Printf("entitlements service listening on :%s", port)
+	log.Printf("entitlements service listening on %s", addr)
 	log.Fatal(srv.ListenAndServe())
 }
 
