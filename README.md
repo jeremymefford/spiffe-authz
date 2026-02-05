@@ -134,6 +134,50 @@ kubectl -n lab logs deploy/opa-fraud -c opa --tail=5
 
 ## Architecture
 
+### High-Level Architecture
+
+```mermaid
+flowchart LR
+    Client((Client))
+
+    subgraph PaymentPod["payment pod"]
+        PE[Envoy]
+        P[Payment Service]
+    end
+
+    subgraph OpaPaymentPod["opa-payment pod"]
+        OPE[Envoy]
+        OP[OPA Payment]
+    end
+
+    subgraph EntitlementsPod["entitlements pod"]
+        EE[Envoy]
+        E[Entitlements Service]
+    end
+
+    subgraph FraudPod["fraud pod"]
+        FE[Envoy]
+        F[Fraud Service]
+    end
+
+    subgraph OpaFraudPod["opa-fraud pod"]
+        OFE[Envoy]
+        OF[OPA Fraud]
+    end
+
+    Client --> PE
+    PE --> P
+    PE --> OPE
+    OPE --> OP
+    OP --> EE
+    EE --> E
+    P --> FE
+    FE --> F
+    FE --> OFE
+    OFE --> OF
+    OF --> EE
+```
+
 ### High-Level Flow
 
 ```mermaid
