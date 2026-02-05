@@ -1,4 +1,4 @@
-# SPIRE + SPIFFE + Envoy + OPA lab (kind)
+# SPIRE + SPIFFE + Envoy + OPA lab
 
 _OpenAI's Codex was heavily used in creating this lab_
 
