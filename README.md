@@ -141,31 +141,41 @@ flowchart LR
     Client((Client))
 
     subgraph PaymentPod["payment pod"]
+        PE[Envoy]
         P["Payment Service<br/>charges + calls fraud"]
     end
 
     subgraph OpaPaymentPod["opa-payment pod"]
-        OP["OPA Payment<br/>authz for /v1/charge"]
+        OPE[Envoy]
+        OP["OPA Payment<br/>AuthZ for Payments"]
     end
 
     subgraph EntitlementsPod["entitlements pod"]
-        E["Entitlements Service<br/>SPIFFE + JWT roles"]
+        EE[Envoy]
+        E["Entitlements Service<br/>Roles repository"]
     end
 
     subgraph FraudPod["fraud pod"]
+        FE[Envoy]
         F["Fraud Service<br/>risk score"]
     end
 
     subgraph OpaFraudPod["opa-fraud pod"]
-        OF["OPA Fraud<br/>authz for /v1/score"]
+        OFE[Envoy]
+        OF["OPA Fraud<br/>AuthZ for Fraud"]
     end
 
-    Client --> P
-    Client --> OP
-    OP --> E
-    P --> F
-    P --> OF
-    OF --> E
+    Client --> PE
+    PE --> P
+    PE --> OPE
+    OPE --> OP
+    OP --> EE
+    EE --> E
+    P --> FE
+    FE --> F
+    FE --> OFE
+    OFE --> OF
+    OF --> EE
 ```
 
 ### High-Level Flow
