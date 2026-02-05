@@ -5,7 +5,9 @@ _OpenAI's Codex was heavily used in creating this lab_
 ## Overview
 This lab illustrates how authz enforcement can be a platform responsibility rather than an application‑code responsibility. It uses Envoy's `ext_authz` plugin to push decision‑making to OPA. This is a highly scalable way to enforce intelligent authorization at runtime within a service mesh.
 
-It differs from traditional intention‑based mesh authz approaches because OPA evaluates the full HTTP request context rather than just source / destination / URI. That means decisions can use the request body, the authorization header, or metadata from an external service. This lab showcases that with a simple entitlements service that stores additional metadata and maps JWT claims to roles. Using OPA this way is not mutually exclusive with other service‑mesh authz; they can work in concert (the mesh handles coarse‑grained intent policy, and OPA handles finer‑grained rules).
+It differs from traditional intention‑based mesh authz approaches because OPA evaluates the full HTTP request context rather than just source / destination / URI. That means decisions can use the request body, the authorization header, or metadata from an external service. This lab showcases that with a simple entitlements service that stores additional metadata and maps JWT claims to roles. Entitlement service calls from OPA are cached in a short lived (30s) cache to showcase how this can also scale without taxing core systems.
+
+Using OPA this way is not mutually exclusive with other service‑mesh authz; they can work in concert (the mesh handles coarse‑grained intent policy, and OPA handles finer‑grained rules).
 
 Application teams still own the "rules of engagement" by owning the Rego policy that OPA executes. The platform pulls those rules through the deployment pipeline and pushes them to running OPA agents. The platform owns enforcement, but the app teams own the rules. This also has the side benefit of updating authz rules without redeploying the application — only the corresponding OPA policies need to change.
 
